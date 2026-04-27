@@ -1,172 +1,189 @@
 import streamlit as st
 import pandas as pd
 
-# -----------------------
-# PAGE CONFIG
-# -----------------------
-st.set_page_config(page_title="CINEBOT", layout="wide")
-
-# -----------------------
-# CUSTOM STYLE (Dark + Glow UI)
-# -----------------------
-st.markdown("""
-<style>
-body {
-    background-color: #0A0A0B;
-    color: white;
-}
-
-.stApp {
-    background: linear-gradient(135deg, #0A0A0B, #111827);
-}
-
-.chat-user {
-    background: #7f1d1d;
-    padding: 10px;
-    border-radius: 10px;
-    margin: 5px;
-    text-align: right;
-}
-
-.chat-bot {
-    background: #1f2937;
-    padding: 10px;
-    border-radius: 10px;
-    margin: 5px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# -----------------------
-# LOAD DATA
-# -----------------------
+# ---------- LOAD DATA ----------
 @st.cache_data
 def load_data():
     return pd.read_csv("final_movies.csv")
 
 df = load_data()
 
-# -----------------------
-# SESSION STATE
-# -----------------------
-if "chat" not in st.session_state:
-    st.session_state.chat = []
+# ---------- CONFIG ----------
+st.set_page_config(layout="wide")
 
-if "filters" not in st.session_state:
-    st.session_state.filters = {
-        "genre": None,
-        "language": None,
-        "mood": None
-    }
+# ---------- STYLE ----------
+st.markdown("""
+<style>
 
-# -----------------------
-# TITLE
-# -----------------------
-st.markdown("<h1 style='text-align:center;'>CINEBOT</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>Conversational Movie Recommendation System</p>", unsafe_allow_html=True)
+/* Background */
+.stApp {
+    background: linear-gradient(135deg, #0b0b0b, #1a1a1a);
+}
 
-# -----------------------
-# LAYOUT
-# -----------------------
-left, right = st.columns([1, 3])
+/* Title */
+.main-title {
+    text-align:center;
+    font-size:50px;
+    color: gold;
+}
 
-# -----------------------
-# LEFT PANEL (FILTERS)
-# -----------------------
-with left:
-    st.subheader("Preferences")
+/* Button */
+.stButton>button {
+    background: linear-gradient(90deg, gold, orange);
+    color: black;
+    border-radius: 10px;
+    border: none;
+}
 
-    genre = st.selectbox("Genre", ["Any"] + sorted(df["genre"].dropna().unique()))
-    language = st.selectbox("Language", ["Any"] + sorted(df["language"].dropna().unique()))
-    mood = st.selectbox("Mood", ["Any"] + sorted(df["mood"].dropna().unique()))
-    rating = st.slider("Minimum Rating", 0.0, 10.0, 7.0)
+/* Movie Card */
+.movie-card {
+    background: linear-gradient(145deg, rgba(0,0,0,0.8), rgba(30,30,30,0.9));
+    padding:20px;
+    border-radius:15px;
+    margin-bottom:15px;
+    border:1px solid rgba(255,215,0,0.3);
+    box-shadow: 0 0 15px rgba(255,215,0,0.2);
+    transition: 0.3s;
+}
+.movie-card:hover {
+    transform: scale(1.02);
+}
 
-    if st.button("Suggest Movies"):
-        st.session_state.filters["genre"] = None if genre == "Any" else genre
-        st.session_state.filters["language"] = None if language == "Any" else language
-        st.session_state.filters["mood"] = None if mood == "Any" else mood
+</style>
+""", unsafe_allow_html=True)
 
-        results = df.copy()
+# ---------- SESSION ----------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-        if st.session_state.filters["genre"]:
-            results = results[results["genre"] == st.session_state.filters["genre"]]
+if "mode" not in st.session_state:
+    st.session_state.mode = "default"
 
-        if st.session_state.filters["language"]:
-            results = results[results["language"] == st.session_state.filters["language"]]
+if "genre" not in st.session_state:
+    st.session_state.genre = None
 
-        if st.session_state.filters["mood"]:
-            results = results[results["mood"] == st.session_state.filters["mood"]]
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-        results = results[results["rating"] >= rating]
-        results = results.sort_values(by="rating", ascending=False).head(5)
+# ---------- LOGIN ----------
+if not st.session_state.logged_in:
 
-        st.session_state.chat.append({
-            "role": "bot",
-            "text": format_results(results)
-        })
+    st.markdown("<h1 class='main-title'>🎬 CINEBOT</h1>", unsafe_allow_html=True)
 
-    if st.button("Reset Chat"):
-        st.session_state.chat = []
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown("### Login")
+        user = st.text_input("Username")
+        pwd = st.text_input("Password", type="password")
 
-# -----------------------
-# FORMAT RESULT
-# -----------------------
-def format_results(results):
-    if results.empty:
-        return "No movies found. Try different filters."
+        if st.button("Enter"):
+            if user == "admin" and pwd == "password123":
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                st.error("Invalid login")
 
-    text = "Recommended Movies:\n\n"
-    for _, row in results.iterrows():
-        text += f"{row['title']} ({row['year']}) - {row['genre']} - {row['language']} - ⭐ {row['rating']}\n"
-    return text
+    st.stop()
 
-# -----------------------
-# CHAT LOGIC
-# -----------------------
-def chatbot_response(user_input):
-    text = user_input.lower()
+# ---------- CHAT MOOD ----------
+def detect_mood(text):
+    text = text.lower()
 
-    if "thriller" in text:
-        st.session_state.filters["genre"] = "Thriller"
+    if "sad" in text:
+        return "emotional"
+    elif "happy" in text:
+        return "feel-good"
+    elif "love" in text:
+        return "romantic"
+    elif "action" in text:
+        return "action"
+    elif "thrill" in text:
+        return "thriller"
 
-    if "tamil" in text:
-        st.session_state.filters["language"] = "Tamil"
+    return None
 
-    if "dark" in text:
-        st.session_state.filters["mood"] = "Dark"
+# ---------- FILTER FUNCTION ----------
+def get_movies():
+    data = df.copy()
 
-    results = df.copy()
+    if st.session_state.mode == "chat":
+        mood = st.session_state.genre
+        data = data[data["mood"].str.lower() == mood]
 
-    if st.session_state.filters["genre"]:
-        results = results[results["genre"] == st.session_state.filters["genre"]]
+    elif st.session_state.mode == "filter":
+        genre = st.session_state.genre
+        data = data[data["genre"].str.lower() == genre.lower()]
 
-    if st.session_state.filters["language"]:
-        results = results[results["language"] == st.session_state.filters["language"]]
+    return data.sort_values(by="rating", ascending=False).head(20)
 
-    if st.session_state.filters["mood"]:
-        results = results[results["mood"] == st.session_state.filters["mood"]]
+# ---------- SIDEBAR ----------
+st.sidebar.title("🎛 Preferences")
 
-    results = results.sort_values(by="rating", ascending=False).head(5)
+genre = st.sidebar.selectbox("Genre", ["Select","Action","Comedy","Romance","Drama","Thriller"])
 
-    return format_results(results)
+if st.sidebar.button("Recommend Movies"):
+    if genre != "Select":
+        st.session_state.genre = genre
+        st.session_state.mode = "filter"
 
-# -----------------------
-# RIGHT PANEL (CHAT)
-# -----------------------
-with right:
-    st.subheader("CINEBOT Chat")
+# ---------- MAIN ----------
+st.markdown("<h1 class='main-title'>🍿 CINEBOT</h1>", unsafe_allow_html=True)
 
-    for msg in st.session_state.chat:
-        if msg["role"] == "user":
-            st.markdown(f"<div class='chat-user'>{msg['text']}</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='chat-bot'>{msg['text']}</div>", unsafe_allow_html=True)
+col_main, col_chat = st.columns([3,1])
 
-    user_input = st.text_input("Type your message...")
+# ---------- CHAT ----------
+with col_chat:
+    st.subheader("💬 Chat")
 
-    if st.button("Send") and user_input:
-        st.session_state.chat.append({"role": "user", "text": user_input})
+    user_input = st.text_input("Say something")
 
-        response = chatbot_response(user_input)
+    if st.button("Send"):
+        if user_input:
+            mood = detect_mood(user_input)
 
-        st.session_state.chat.append({"role": "bot", "text": response})
+            if mood:
+                st.session_state.genre = mood
+                st.session_state.mode = "chat"
+                reply = f"Got it! Showing {mood} movies 🎬"
+            else:
+                reply = "Try words like sad, happy, love, action"
+
+            st.session_state.chat_history.append(("You", user_input))
+            st.session_state.chat_history.append(("Bot", reply))
+
+    for sender, msg in st.session_state.chat_history:
+        st.write(f"**{sender}:** {msg}")
+
+# ---------- DISPLAY ----------
+def show_movies(title, data):
+    st.subheader(title)
+
+    if data.empty:
+        st.warning("No movies found")
+        return
+
+    cols = st.columns(2)
+
+    for i, row in data.iterrows():
+        with cols[i % 2]:
+            st.markdown(f"""
+            <div class="movie-card">
+                <h3>🎬 {row['title']}</h3>
+                ⭐ {row['rating']} <br>
+                🎭 {row['genre']} <br>
+                🌐 {row['language']} <br>
+                😊 Mood: {row['mood']} <br>
+                📅 Year: {row['year']}
+            </div>
+            """, unsafe_allow_html=True)
+
+# ---------- LOGIC ----------
+with col_main:
+
+    if st.session_state.mode in ["chat","filter"]:
+        movies = get_movies()
+        show_movies("🎬 Recommended Movies", movies)
+
+    else:
+        trending = df.sort_values(by="popularity", ascending=False).head(20)
+        show_movies("🔥 Trending Movies", trending)
